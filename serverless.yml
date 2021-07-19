@@ -1,0 +1,105 @@
+service: aws-cognito
+
+frameworkVersion: "2"
+
+provider:
+  name: aws
+  runtime: nodejs12.x
+  lambdaHashingVersion: 20201221
+  region: us-east-2
+
+resources:
+  Resources:
+    DynamodbExampleTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: ID
+            AttributeType: S
+          - AttributeName: ItemAddress
+            AttributeType: S
+        KeySchema:
+          - AttributeName: ID
+            KeyType: HASH
+          - AttributeName: ItemAddress
+            KeyType: RANGE
+
+    CognitoUserPool:
+      Type: AWS::Cognito::UserPool
+      Properties:
+        AutoVerifiedAttributes:
+          - email
+        UserPoolName: ${self:service}-user-pool
+        UsernameAttributes:
+          - email
+
+    CognitoPoolClient:
+      Type: AWS::Cognito::UserPoolClient
+      Properties:
+        ClientName: ${self:service}-user-pool-client
+        GenerateSecret: false
+        UserPoolId: !Ref CognitoUserPool
+
+    CognitoAdminGroup:
+      Type: AWS::Cognito::UserPoolGroup
+      Properties:
+        GroupName: ${self:service}-admin-group
+        Precedence: 0
+        RoleArn: !GetAtt CognitoAdminRole.Arn
+        UserPoolId: !Ref CognitoUserPool
+
+    CognitoMemberGroup:
+      Type: AWS::Cognito::UserPoolGroup
+      Properties:
+        GroupName: ${self:service}-member-group
+        Precedence: 1
+        RoleArn: !GetAtt CognitoMemberRole.Arn
+        UserPoolId: !Ref CognitoUserPool
+
+    CognitoAdminRole:
+      Type: AWS::IAM::Role
+      Properties:
+        AssumeRolePolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Principal:
+                Federated:
+                  - "cognito-identity.amazonaws.com"
+              Action:
+                - "sts:AssumeRole"
+        Policies:
+          - PolicyName: admin-policy
+            PolicyDocument:
+              Version: "2012-10-17"
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - "dynamodb:*"
+                  Resource: !GetAtt DynamodbExampleTable.Arn
+        RoleName: cognito-admin-role
+
+    CognitoMemberRole:
+      Type: AWS::IAM::Role
+      Properties:
+        AssumeRolePolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Principal:
+                Federated:
+                  - "cognito-identity.amazonaws.com"
+              Action:
+                - "sts:AssumeRole"
+        Policies:
+          - PolicyName: member-policy
+            PolicyDocument:
+              Version: "2012-10-17"
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - "dynamodb:GetItem"
+                    - "dynamodb:Query"
+                  Resource: !GetAtt DynamodbExampleTable.Arn
+        RoleName: cognito-member-role
